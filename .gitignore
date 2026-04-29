@@ -27,3 +27,6 @@ go.work.sum
 *.csv
 
 dist/
+.DS_Store
+.claude/
+mdcsv
