@@ -171,10 +171,11 @@ func isValidSeparator(sep string) bool {
 }
 
 type Config struct {
-	From   string
-	To     string
-	Input  string
-	Output string
+	From     string
+	To       string
+	Input    string
+	Output   string
+	Reformat bool
 }
 
 func inferFormat(path string) (string, bool) {
@@ -197,17 +198,23 @@ func detectFormat(content string) string {
 	return "csv"
 }
 
-func resolveConfig(input, output string) (Config, error) {
-	cfg := Config{Input: input, Output: output}
-
-	if cfg.Input != "" && cfg.Input != "-" {
-		f, ok := inferFormat(cfg.Input)
-		if !ok {
-			return cfg, fmt.Errorf("cannot infer input format from %q; want a .md or .csv file", cfg.Input)
-		}
-		cfg.From = f
-		cfg.To = counterpart[f]
+// targetFormat picks the output format: the -o extension when given,
+// otherwise the input format under --reformat or its counterpart.
+func targetFormat(from, outputExt string, reformat bool) (string, error) {
+	if reformat && outputExt != "" && outputExt != from {
+		return "", fmt.Errorf("--reformat keeps the %s format, but the output path is .%s", from, outputExt)
 	}
+	if outputExt != "" {
+		return outputExt, nil
+	}
+	if reformat {
+		return from, nil
+	}
+	return counterpart[from], nil
+}
+
+func resolveConfig(input, output string, reformat bool) (Config, error) {
+	cfg := Config{Input: input, Output: output, Reformat: reformat}
 
 	if cfg.Output != "" && cfg.Output != "-" {
 		t, ok := inferFormat(cfg.Output)
@@ -217,10 +224,23 @@ func resolveConfig(input, output string) (Config, error) {
 		cfg.To = t
 	}
 
+	if cfg.Input != "" && cfg.Input != "-" {
+		f, ok := inferFormat(cfg.Input)
+		if !ok {
+			return cfg, fmt.Errorf("cannot infer input format from %q; want a .md or .csv file", cfg.Input)
+		}
+		cfg.From = f
+		to, err := targetFormat(f, cfg.To, reformat)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.To = to
+	}
+
 	return cfg, nil
 }
 
-const usage = `usage: mdcsv [-o FILE] [FILE]
+const usage = `usage: mdcsv [-r] [-o FILE] [FILE]
 
 Convert between markdown tables and CSV. The direction follows the
 input: a .md file converts to CSV, a .csv file to markdown. Reads stdin
@@ -229,9 +249,11 @@ and -o '-' for stdout. Stdin is detected by content: input starting
 with '|' is markdown, anything else is CSV.
 
 Flags:
+  -r, --reformat       keep the input format: align markdown table
+                       columns, or validate CSV shape and normalize
+                       quoting and line endings
   -o, --output FILE    output file (default: stdout); a .md or .csv
-                       extension overrides the output format, so
-                       'mdcsv in.md -o out.md' reformats the table
+                       extension overrides the output format
   -h, --help           this message
 `
 
@@ -241,8 +263,11 @@ func parseFlags(args []string) (Config, error) {
 	fs.Usage = func() {}
 
 	var output string
+	var reformat bool
 	fs.StringVar(&output, "o", "", "")
 	fs.StringVar(&output, "output", "", "")
+	fs.BoolVar(&reformat, "r", false, "")
+	fs.BoolVar(&reformat, "reformat", false, "")
 
 	// flag.Parse stops at the first non-flag argument, so we re-parse
 	// after each positional to allow `mdcsv data.md -o out.csv` style.
@@ -263,7 +288,7 @@ func parseFlags(args []string) (Config, error) {
 		remaining = rest[1:]
 	}
 
-	return resolveConfig(input, output)
+	return resolveConfig(input, output, reformat)
 }
 
 func run(cfg Config, stdin io.Reader, stdout io.Writer) error {
@@ -280,13 +305,12 @@ func run(cfg Config, stdin io.Reader, stdout io.Writer) error {
 		return fmt.Errorf("reading input: %w", err)
 	}
 
-	from := cfg.From
+	from, to := cfg.From, cfg.To
 	if from == "" {
 		from = detectFormat(string(content))
-	}
-	to := cfg.To
-	if to == "" {
-		to = counterpart[from]
+		if to, err = targetFormat(from, cfg.To, cfg.Reformat); err != nil {
+			return err
+		}
 	}
 
 	table, err := parsers[from].Parse(string(content))

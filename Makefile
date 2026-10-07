@@ -36,6 +36,10 @@ smoke: build ## run end-to-end smoke tests against testdata fixtures
 	echo "md→csv (file in, stdout)";        $$bin testdata/simple.md  | diff testdata/simple.csv -; \
 	echo "csv→md (file in, stdout)";        $$bin testdata/simple.csv | diff testdata/simple.md  -; \
 	echo "md→md (reformat via -o .md)";     $$bin testdata/messy.md -o $$tmp/clean.md && diff testdata/simple.md $$tmp/clean.md; \
+	echo "md→md (--reformat, stdout)";      $$bin --reformat testdata/messy.md  | diff testdata/simple.md  -; \
+	echo "csv→csv (--reformat, stdout)";    $$bin --reformat testdata/messy.csv | diff testdata/simple.csv -; \
+	echo "csv→csv (-r, stdin pipe)";        cat testdata/messy.csv | $$bin -r | diff testdata/simple.csv -; \
+	echo "--reformat with conflicting -o errors"; if $$bin -r testdata/simple.md -o $$tmp/x.csv 2>/dev/null; then echo "  expected non-zero exit" >&2; exit 1; fi; \
 	echo "md→csv (stdin pipe, sniffed)";    cat testdata/simple.md  | $$bin | diff testdata/simple.csv -; \
 	echo "csv→md (stdin pipe, sniffed)";    cat testdata/simple.csv | $$bin | diff testdata/simple.md  -; \
 	echo "md→csv (file in, -o .csv)";       $$bin testdata/simple.md -o $$tmp/out.csv && diff testdata/simple.csv $$tmp/out.csv; \

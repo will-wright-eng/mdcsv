@@ -17,7 +17,8 @@ and `to` are independent.
 - Pipe-friendly: read stdin, write stdout by default.
 - Conversion direction is implied by the input format: `md` → `csv` and
   `csv` → `md`. No format flags at all.
-- Support md → md as a first-class mode (pretty-print / column-align).
+- Support md → md as a first-class mode (pretty-print / column-align)
+  via `--reformat`.
 - Keep the surface area small — one binary, no subcommands.
 
 ## Non-goals
@@ -26,19 +27,21 @@ and `to` are independent.
 - Robust content-based format detection. Stdin uses a one-character
   sniff (`|` → markdown, else CSV); files are extension-based only.
 - Streaming for tables larger than memory.
-- `csv → csv` normalization. The registry technically supports it, but no
-  custom quoting/whitespace handling beyond `encoding/csv` defaults is in
-  scope for this phase.
+- Custom `csv → csv` normalization. `--reformat` on CSV validates row
+  shape and round-trips through `encoding/csv`, which normalizes quoting,
+  CRLF line endings, and the trailing newline. Nothing beyond those
+  defaults (whitespace trimming, delimiter changes) is in scope.
 
 ## CLI surface
 
 ```
-mdcsv [-o FILE] [FILE]
+mdcsv [-r] [-o FILE] [FILE]
 ```
 
-| Flag             | Description                                                |
-| ---------------- | ---------------------------------------------------------- |
-| `-o`, `--output` | Output file. Default or `-`: stdout.                       |
+| Flag               | Description                                                |
+| ------------------ | ---------------------------------------------------------- |
+| `-r`, `--reformat` | Keep the input format: align markdown columns, or validate and normalize CSV. |
+| `-o`, `--output`   | Output file. Default or `-`: stdout.                       |
 | `FILE`           | Input file. Default or `-`: stdin.                         |
 | `-h`, `--help`   | Usage.                                                     |
 
@@ -57,8 +60,14 @@ cat data.md | mdcsv > data.csv
 # File in, file out
 mdcsv data.csv -o data.md
 
-# Reformat a markdown table (md -> md): the .md output path overrides
-# the default direction
+# Reformat a markdown table in place (md -> md)
+mdcsv --reformat messy.md > clean.md
+cat messy.md | mdcsv -r
+
+# Validate and normalize a CSV (csv -> csv)
+mdcsv -r data.csv
+
+# Without the flag, a matching .md output path does the same
 mdcsv messy.md -o clean.md
 ```
 
@@ -74,8 +83,10 @@ Input format:
 
 Output format, in priority order:
 
-1. `-o` file extension, when `-o` names a file.
-2. The counterpart of the input format: `md` → `csv`, `csv` → `md`.
+1. `-o` file extension, when `-o` names a file. Under `--reformat` it
+   must match the input format, otherwise error.
+2. The input format, under `--reformat`.
+3. The counterpart of the input format: `md` → `csv`, `csv` → `md`.
 
 | Extension           | Format |
 | ------------------- | ------ |
@@ -84,8 +95,8 @@ Output format, in priority order:
 | anything else       | error — rename the file or use a `.md`/`.csv` path for `-o` |
 
 Consequences: `mdcsv in.md > out.csv` and `cat in.md | mdcsv > out.csv`
-both work with no flags. md → md through a pipe is not expressible;
-reformatting requires a `.md` output path (`mdcsv messy.md -o clean.md`).
+both work with no flags. `--reformat` makes same-format output
+expressible through a pipe (`cat messy.md | mdcsv -r`).
 
 ## md → md formatting
 
@@ -185,11 +196,12 @@ Add `main_test.go` with:
   given a `Table`, output matches the expected string byte-for-byte
   (column alignment matters for the markdown formatter).
 - Format inference tests covering the rules in "Format inference" —
-  extension sets the direction, `-o` extension overrides, stdin is
-  sniffed, unknown extensions error, etc.
+  extension sets the direction, `-o` extension overrides, `--reformat`
+  keeps the format and rejects a conflicting `-o`, stdin is sniffed,
+  unknown extensions error, etc.
 
-Add a `make smoke` target that exercises the three in-scope mode
-combinations end-to-end via shell pipelines (md→csv, csv→md, md→md),
+Add a `make smoke` target that exercises the mode combinations
+end-to-end via shell pipelines (md→csv, csv→md, md→md, csv→csv),
 asserting output matches a checked-in fixture. This catches wiring bugs
 that unit tests miss (flag parsing, stdin/stdout paths, exit codes).
 
