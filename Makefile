@@ -50,6 +50,10 @@ smoke: build ## run end-to-end smoke tests against testdata fixtures
 	rm -rf $$tmp; \
 	echo "all smoke checks passed"
 
+#* Release
+snapshot: ## build release archives locally without publishing
+	goreleaser release --snapshot --clean
+
 #* Install Commands
 install: build ## install binary
 	sudo mkdir -p $(INSTALL_PATH)

@@ -50,6 +50,15 @@ mdcsv -v | --version
 
 Supported formats: `md`, `csv`. `-r`/`--reformat` keeps the input format: `md→md` aligns columns; `csv→csv` validates row shape and normalizes quoting and line endings via `encoding/csv`. Writing to an output path whose extension matches the input (e.g. `mdcsv messy.md -o clean.md`) does the same without the flag.
 
+## Releasing
+
+Releases are cut by GoReleaser (`.goreleaser.yaml`) from the `release` GitHub Actions workflow, which runs on any `v*` tag push. It runs the tests, cross-compiles for linux/darwin/windows on amd64/arm64, stamps `main.version` with the tag, attaches archives and `checksums.txt` to a GitHub release, and groups the notes by conventional commit type (`docs`, `test`, `chore`, `ci` are excluded).
+
+```sh
+make snapshot                      # dry run: builds archives into dist/ without publishing
+git tag v0.3.0 && git push origin v0.3.0   # publishes the release
+```
+
 ## License
 
 Copyright (C) 2026 will-wright-eng
