@@ -7,6 +7,8 @@ GOBASE=$(shell pwd)
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOTEST=$(GOCMD) test
+VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 
 #* Setup
 .PHONY: $(shell sed -n -e '/^$$/ { n ; /^[^ .\#][^ ]*:/ { s/:.*$$// ; p ; } ; }' $(MAKEFILE_LIST))
@@ -19,7 +21,7 @@ help: ## list make commands
 #* Go Commands
 build: ## build binary
 	mkdir -p $(GOBASE)/dist
-	$(GOBUILD) -o $(GOBASE)/dist/$(BINARY_NAME) ./main.go
+	$(GOBUILD) $(LDFLAGS) -o $(GOBASE)/dist/$(BINARY_NAME) ./main.go
 
 clean: ## remove binary
 	rm -f $(GOBASE)/dist/$(BINARY_NAME)
@@ -43,6 +45,7 @@ smoke: build ## run end-to-end smoke tests against testdata fixtures
 	echo "md→csv (stdin pipe, sniffed)";    cat testdata/simple.md  | $$bin | diff testdata/simple.csv -; \
 	echo "csv→md (stdin pipe, sniffed)";    cat testdata/simple.csv | $$bin | diff testdata/simple.md  -; \
 	echo "md→csv (file in, -o .csv)";       $$bin testdata/simple.md -o $$tmp/out.csv && diff testdata/simple.csv $$tmp/out.csv; \
+	echo "--version prints a version";      $$bin --version | grep -q '^mdcsv '; \
 	echo "unknown input extension errors";  if $$bin go.mod 2>/dev/null; then echo "  expected non-zero exit" >&2; exit 1; fi; \
 	rm -rf $$tmp; \
 	echo "all smoke checks passed"

@@ -43,7 +43,10 @@ There are no format flags. Input format comes from the input file extension (`.m
 
 ```
 mdcsv [-r] [-o FILE] [FILE]
+mdcsv -v | --version
 ```
+
+`-v`/`--version` prints the version. `make build` stamps it from `git describe` via `-ldflags "-X main.version=..."` (override with `VERSION=x make build`); a plain `go build` reports `dev`, and `go install ...@vX.Y.Z` reports the module version.
 
 Supported formats: `md`, `csv`. `-r`/`--reformat` keeps the input format: `md→md` aligns columns; `csv→csv` validates row shape and normalizes quoting and line endings via `encoding/csv`. Writing to an output path whose extension matches the input (e.g. `mdcsv messy.md -o clean.md`) does the same without the flag.
 

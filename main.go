@@ -8,8 +8,23 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 )
+
+// Set at build time via -ldflags "-X main.version=..."; falls back to the
+// module version stamped by `go install pkg@version`.
+var version = "dev"
+
+func versionString() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
+}
 
 type Table struct {
 	Headers []string
@@ -241,6 +256,7 @@ func resolveConfig(input, output string, reformat bool) (Config, error) {
 }
 
 const usage = `usage: mdcsv [-r] [-o FILE] [FILE]
+       mdcsv -v | --version
 
 Convert between markdown tables and CSV. The direction follows the
 input: a .md file converts to CSV, a .csv file to markdown. Reads stdin
@@ -255,6 +271,7 @@ Flags:
   -o, --output FILE    output file (default: stdout); a .md or .csv
                        extension overrides the output format
   -h, --help           this message
+  -v, --version        print the version and exit
 `
 
 func parseFlags(args []string) (Config, error) {
@@ -335,6 +352,10 @@ func main() {
 	for _, a := range args {
 		if a == "-h" || a == "--help" {
 			fmt.Print(usage)
+			return
+		}
+		if a == "-v" || a == "--version" {
+			fmt.Println("mdcsv", versionString())
 			return
 		}
 	}
