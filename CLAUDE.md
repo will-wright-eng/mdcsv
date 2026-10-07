@@ -35,17 +35,17 @@ All code lives in a single `main.go` (per DESIGN.md: stay there until a concrete
 
 **Config resolution pipeline:** `parseFlags` → `resolveConfig` → `run`
 
-Format inference is per-side and priority-ordered: explicit flag wins, then file extension, then error. Stdin without `-f` and stdout without `-t`/`-o` are always errors.
+Input format: explicit `-f` wins, then the input file extension, then error (stdin without `-f` is always an error). Output format: the `-o` file extension if given, otherwise the counterpart of the input format (`md`→`csv`, `csv`→`md`). There is no output-format flag.
 
 **I/O:** input from stdin or a positional file arg; output to stdout or `-o FILE`. Both sides accept `-` as an explicit stdin/stdout alias.
 
 ## CLI surface
 
 ```
-mdcsv [-f FROM] [-t TO] [-o FILE] [FILE]
+mdcsv [-f FORMAT] [-o FILE] [FILE]
 ```
 
-Supported formats: `md`, `csv`. `md→md` is valid (reformats/aligns columns).
+Supported formats: `md`, `csv`. `md→md` (reformat/align columns) is reached by writing to a `.md` output path, e.g. `mdcsv messy.md -o clean.md`.
 
 ## License
 

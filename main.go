@@ -187,56 +187,50 @@ func inferFormat(path string) (string, bool) {
 	return "", false
 }
 
-func resolveConfig(from, to, input, output string) (Config, error) {
-	cfg := Config{From: from, To: to, Input: input, Output: output}
+var counterpart = map[string]string{"md": "csv", "csv": "md"}
+
+func resolveConfig(from, input, output string) (Config, error) {
+	cfg := Config{From: from, Input: input, Output: output}
 
 	if cfg.From == "" {
-		if cfg.Input != "" && cfg.Input != "-" {
-			f, ok := inferFormat(cfg.Input)
-			if !ok {
-				return cfg, fmt.Errorf("cannot infer input format from %q; pass -f md|csv", cfg.Input)
-			}
-			cfg.From = f
-		} else {
+		if cfg.Input == "" || cfg.Input == "-" {
 			return cfg, errors.New("input format required: pass -f md|csv (cannot infer from stdin)")
 		}
-	}
-
-	if cfg.To == "" {
-		if cfg.Output != "" && cfg.Output != "-" {
-			t, ok := inferFormat(cfg.Output)
-			if !ok {
-				return cfg, fmt.Errorf("cannot infer output format from %q; pass -t md|csv", cfg.Output)
-			}
-			cfg.To = t
-		} else {
-			return cfg, errors.New("output format required: pass -t md|csv (cannot infer from stdout)")
+		f, ok := inferFormat(cfg.Input)
+		if !ok {
+			return cfg, fmt.Errorf("cannot infer input format from %q; pass -f md|csv", cfg.Input)
 		}
+		cfg.From = f
 	}
-
 	if _, ok := parsers[cfg.From]; !ok {
 		return cfg, fmt.Errorf("unknown input format %q (want md or csv)", cfg.From)
 	}
-	if _, ok := formatters[cfg.To]; !ok {
-		return cfg, fmt.Errorf("unknown output format %q (want md or csv)", cfg.To)
+
+	cfg.To = counterpart[cfg.From]
+	if cfg.Output != "" && cfg.Output != "-" {
+		t, ok := inferFormat(cfg.Output)
+		if !ok {
+			return cfg, fmt.Errorf("cannot infer output format from %q; use a .md or .csv output path", cfg.Output)
+		}
+		cfg.To = t
 	}
 
 	return cfg, nil
 }
 
-const usage = `usage: mdcsv [-f FROM] [-t TO] [-o FILE] [FILE]
+const usage = `usage: mdcsv [-f FORMAT] [-o FILE] [FILE]
 
-Convert between markdown tables and CSV. Reads stdin and writes stdout
-by default; FILE or '-' can also stand in for stdin, and -o '-' for
-stdout.
+Convert between markdown tables and CSV. The output format is the
+opposite of the input: a .md file converts to CSV, a .csv file to
+markdown. Reads stdin and writes stdout by default; FILE or '-' can
+also stand in for stdin, and -o '-' for stdout.
 
 Flags:
-  -f, --from FORMAT    input format: md or csv
-  -t, --to FORMAT      output format: md or csv
-  -o, --output FILE    output file (default: stdout)
+  -f, --from FORMAT    input format (md or csv); required when reading stdin
+  -o, --output FILE    output file (default: stdout); a .md or .csv
+                       extension overrides the output format, so
+                       'mdcsv in.md -o out.md' reformats the table
   -h, --help           this message
-
-Formats are inferred from file extensions when -f / -t are omitted.
 `
 
 func parseFlags(args []string) (Config, error) {
@@ -244,11 +238,9 @@ func parseFlags(args []string) (Config, error) {
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {}
 
-	var from, to, output string
+	var from, output string
 	fs.StringVar(&from, "f", "", "")
 	fs.StringVar(&from, "from", "", "")
-	fs.StringVar(&to, "t", "", "")
-	fs.StringVar(&to, "to", "", "")
 	fs.StringVar(&output, "o", "", "")
 	fs.StringVar(&output, "output", "", "")
 
@@ -271,7 +263,7 @@ func parseFlags(args []string) (Config, error) {
 		remaining = rest[1:]
 	}
 
-	return resolveConfig(from, to, input, output)
+	return resolveConfig(from, input, output)
 }
 
 func run(cfg Config, stdin io.Reader, stdout io.Writer) error {

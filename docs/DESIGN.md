@@ -15,7 +15,8 @@ and `to` are independent.
 ## Goals
 
 - Pipe-friendly: read stdin, write stdout by default.
-- Single, explicit way to express the conversion (`-f`, `-t`).
+- Conversion direction is implied by the input format: `md` → `csv` and
+  `csv` → `md`. Only stdin needs an explicit format flag.
 - Support md → md as a first-class mode (pretty-print / column-align).
 - Keep the surface area small — one binary, no subcommands.
 
@@ -31,56 +32,59 @@ and `to` are independent.
 ## CLI surface
 
 ```
-mdcsv [-f FROM] [-t TO] [-o FILE] [FILE]
+mdcsv [-f FORMAT] [-o FILE] [FILE]
 ```
 
-| Flag             | Description                                          |
-| ---------------- | ---------------------------------------------------- |
-| `-f`, `--from`   | Input format: `md` or `csv`.                         |
-| `-t`, `--to`     | Output format: `md` or `csv`.                        |
-| `-o`, `--output` | Output file. Default or `-`: stdout.                 |
-| `FILE`           | Input file. Default or `-`: stdin.                   |
-| `-h`, `--help`   | Usage.                                               |
+| Flag             | Description                                                |
+| ---------------- | ---------------------------------------------------------- |
+| `-f`, `--from`   | Input format: `md` or `csv`. Required when reading stdin.  |
+| `-o`, `--output` | Output file. Default or `-`: stdout.                       |
+| `FILE`           | Input file. Default or `-`: stdin.                         |
+| `-h`, `--help`   | Usage.                                                     |
+
+There is no output-format flag. With only two formats the direction is
+implied: markdown in, CSV out; CSV in, markdown out.
 
 ### Examples
 
 ```sh
+# File in, csv on stdout
+mdcsv data.md > data.csv
+
 # Pipe: md on stdin, csv on stdout
-cat data.md | mdcsv -t csv > data.csv
+cat data.md | mdcsv -f md > data.csv
 
-# File in, file out, formats inferred from extensions
-mdcsv data.md -o data.csv
+# File in, file out
+mdcsv data.csv -o data.md
 
-# Reformat a markdown table in place (md -> md)
-mdcsv -f md -t md messy.md -o clean.md
-
-# Reformat via pipe — same format on both sides
-cat messy.md | mdcsv -f md -t md
+# Reformat a markdown table (md -> md): the .md output path overrides
+# the default direction
+mdcsv messy.md -o clean.md
 ```
 
 ## Format inference
 
-Each side (input, output) resolves independently from its own source, in
-this priority order:
+Input format, in priority order:
 
-1. Explicit flag (`-f` for input, `-t` for output) — always wins.
-2. File extension on that side (`FILE` for input, `-o` for output).
-3. No source available (stdin without `-f`, stdout without `-t` and no
-   `-o`) → error with usage message.
+1. Explicit `-f` — always wins.
+2. `FILE` extension.
+3. Neither (stdin without `-f`) → error with usage message.
+
+Output format, in priority order:
+
+1. `-o` file extension, when `-o` names a file.
+2. The counterpart of the input format: `md` → `csv`, `csv` → `md`.
 
 | Extension           | Format |
 | ------------------- | ------ |
 | `.md`               | `md`   |
 | `.csv`              | `csv`  |
-| anything else       | error — ask for explicit `-f` / `-t` |
+| anything else       | error — ask for explicit `-f` (input) or a `.md`/`.csv` path (output) |
 
-This means inference is asymmetric and per-side: `cat in.md | mdcsv -o
-out.csv` errors (stdin has no `-f`), but `cat in.md | mdcsv -f md -o
-out.csv` works (`-t` inferred from `-o`). Likewise `mdcsv in.md > out.csv`
-errors (stdout has no `-t`), but `mdcsv in.md -t csv > out.csv` works.
-
-If neither `-f` nor `-t` can be resolved, exit non-zero with a usage
-message naming which side is missing.
+Consequences: `cat in.md | mdcsv -o out.csv` errors (stdin has no `-f`),
+but `cat in.md | mdcsv -f md -o out.csv` works. `mdcsv in.md > out.csv`
+works with no flags at all. md → md through a pipe is not expressible;
+reformatting requires a `.md` output path.
 
 ## md → md formatting
 
@@ -153,7 +157,7 @@ formatters := map[string]Formatter{
 
 | Old                              | New                              |
 | -------------------------------- | -------------------------------- |
-| `--to-csv` / `--to-md`           | `-f md -t csv` / `-f csv -t md`  |
+| `--to-csv` / `--to-md`           | implied by input format          |
 | `--in PATH` (required)           | positional `PATH` (optional)     |
 | `--out PATH` (auto-defaulted)    | `-o PATH` (default: stdout)      |
 | Default output path inferred     | Removed — use `-o` or redirect   |

@@ -230,7 +230,6 @@ func TestResolveConfig(t *testing.T) {
 	tests := []struct {
 		name        string
 		from        string
-		to          string
 		input       string
 		output      string
 		wantFrom    string
@@ -239,61 +238,61 @@ func TestResolveConfig(t *testing.T) {
 		errContains string
 	}{
 		{
-			name: "explicit flags only",
-			from: "md", to: "csv",
+			name:     "md file converts to csv",
+			input:    "in.md",
 			wantFrom: "md", wantTo: "csv",
 		},
 		{
-			name:  "both inferred from extensions",
-			input: "in.md", output: "out.csv",
-			wantFrom: "md", wantTo: "csv",
-		},
-		{
-			name: "flag wins over extension",
-			from: "csv", to: "md",
-			input: "in.md", output: "out.csv",
+			name:     "csv file converts to md",
+			input:    "in.csv",
 			wantFrom: "csv", wantTo: "md",
 		},
 		{
-			name:  "stdin pipe with -o for output inference",
-			from:  "md",
-			input: "-", output: "out.csv",
+			name:     "stdin with -f",
+			from:     "md",
 			wantFrom: "md", wantTo: "csv",
 		},
 		{
-			name:  "input file with -t for output (stdout)",
-			to:    "csv",
-			input: "in.md",
-			wantFrom: "md", wantTo: "csv",
+			name:     "explicit stdin alias with -f",
+			from:     "csv",
+			input:    "-",
+			wantFrom: "csv", wantTo: "md",
 		},
 		{
-			name: "md to md is allowed",
-			from: "md", to: "md",
+			name:     "flag wins over input extension",
+			from:     "csv",
+			input:    "in.md",
+			wantFrom: "csv", wantTo: "md",
+		},
+		{
+			name:  "output extension wins over counterpart",
+			input: "in.md", output: "out.md",
 			wantFrom: "md", wantTo: "md",
 		},
 		{
+			name:  "output extension matches counterpart",
+			input: "in.md", output: "out.csv",
+			wantFrom: "md", wantTo: "csv",
+		},
+		{
+			name:  "stdout alias keeps counterpart",
+			input: "in.csv", output: "-",
+			wantFrom: "csv", wantTo: "md",
+		},
+		{
 			name:        "stdin without -f errors",
-			to:          "csv",
 			wantErr:     true,
 			errContains: "input format",
 		},
 		{
-			name:        "stdout without -t and no -o errors",
-			from:        "md",
-			input:       "in.md",
-			wantErr:     true,
-			errContains: "output format",
-		},
-		{
 			name:        "unknown input extension errors",
 			input:       "data.txt",
-			to:          "csv",
 			wantErr:     true,
 			errContains: "cannot infer input format",
 		},
 		{
 			name:        "unknown output extension errors",
-			from:        "md",
+			input:       "in.md",
 			output:      "data.txt",
 			wantErr:     true,
 			errContains: "cannot infer output format",
@@ -301,7 +300,6 @@ func TestResolveConfig(t *testing.T) {
 		{
 			name:        "unknown format value errors",
 			from:        "json",
-			to:          "csv",
 			wantErr:     true,
 			errContains: "unknown input format",
 		},
@@ -309,7 +307,7 @@ func TestResolveConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := resolveConfig(tt.from, tt.to, tt.input, tt.output)
+			cfg, err := resolveConfig(tt.from, tt.input, tt.output)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.errContains)
@@ -340,24 +338,24 @@ func TestParseFlags(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "short flags",
-			args: []string{"-f", "md", "-t", "csv"},
+			name: "short flag",
+			args: []string{"-f", "md"},
 			want: Config{From: "md", To: "csv"},
 		},
 		{
-			name: "long flags",
-			args: []string{"--from", "md", "--to", "csv"},
-			want: Config{From: "md", To: "csv"},
+			name: "long flag",
+			args: []string{"--from", "csv"},
+			want: Config{From: "csv", To: "md"},
 		},
 		{
-			name: "positional file with extension inference",
-			args: []string{"-t", "csv", "in.md"},
+			name: "positional file alone",
+			args: []string{"in.md"},
 			want: Config{From: "md", To: "csv", Input: "in.md"},
 		},
 		{
-			name: "output flag with inference",
-			args: []string{"-f", "md", "-o", "out.csv"},
-			want: Config{From: "md", To: "csv", Output: "out.csv"},
+			name: "stdin with output file inference",
+			args: []string{"-f", "md", "-o", "out.md"},
+			want: Config{From: "md", To: "md", Output: "out.md"},
 		},
 		{
 			name: "positional file before flags",
@@ -366,12 +364,17 @@ func TestParseFlags(t *testing.T) {
 		},
 		{
 			name: "flags around positional file",
-			args: []string{"-f", "md", "in.md", "-o", "out.csv"},
-			want: Config{From: "md", To: "csv", Input: "in.md", Output: "out.csv"},
+			args: []string{"-f", "md", "in.txt", "-o", "out.csv"},
+			want: Config{From: "md", To: "csv", Input: "in.txt", Output: "out.csv"},
 		},
 		{
 			name:    "two positional files errors",
-			args:    []string{"-f", "md", "-t", "csv", "a.md", "b.md"},
+			args:    []string{"a.md", "b.md"},
+			wantErr: true,
+		},
+		{
+			name:    "removed -t flag errors",
+			args:    []string{"-t", "csv", "in.md"},
 			wantErr: true,
 		},
 		{
@@ -397,7 +400,7 @@ func TestParseFlags(t *testing.T) {
 }
 
 func TestRunRoundTrip(t *testing.T) {
-	cfg, err := resolveConfig("md", "csv", "-", "-")
+	cfg, err := resolveConfig("md", "-", "-")
 	if err != nil {
 		t.Fatal(err)
 	}
