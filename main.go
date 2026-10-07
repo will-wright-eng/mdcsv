@@ -189,24 +189,26 @@ func inferFormat(path string) (string, bool) {
 
 var counterpart = map[string]string{"md": "csv", "csv": "md"}
 
-func resolveConfig(from, input, output string) (Config, error) {
-	cfg := Config{From: from, Input: input, Output: output}
+// Stdin has no extension, so format is sniffed from content instead.
+func detectFormat(content string) string {
+	if strings.HasPrefix(strings.TrimSpace(content), "|") {
+		return "md"
+	}
+	return "csv"
+}
 
-	if cfg.From == "" {
-		if cfg.Input == "" || cfg.Input == "-" {
-			return cfg, errors.New("input format required: pass -f md|csv (cannot infer from stdin)")
-		}
+func resolveConfig(input, output string) (Config, error) {
+	cfg := Config{Input: input, Output: output}
+
+	if cfg.Input != "" && cfg.Input != "-" {
 		f, ok := inferFormat(cfg.Input)
 		if !ok {
-			return cfg, fmt.Errorf("cannot infer input format from %q; pass -f md|csv", cfg.Input)
+			return cfg, fmt.Errorf("cannot infer input format from %q; want a .md or .csv file", cfg.Input)
 		}
 		cfg.From = f
-	}
-	if _, ok := parsers[cfg.From]; !ok {
-		return cfg, fmt.Errorf("unknown input format %q (want md or csv)", cfg.From)
+		cfg.To = counterpart[f]
 	}
 
-	cfg.To = counterpart[cfg.From]
 	if cfg.Output != "" && cfg.Output != "-" {
 		t, ok := inferFormat(cfg.Output)
 		if !ok {
@@ -218,15 +220,15 @@ func resolveConfig(from, input, output string) (Config, error) {
 	return cfg, nil
 }
 
-const usage = `usage: mdcsv [-f FORMAT] [-o FILE] [FILE]
+const usage = `usage: mdcsv [-o FILE] [FILE]
 
-Convert between markdown tables and CSV. The output format is the
-opposite of the input: a .md file converts to CSV, a .csv file to
-markdown. Reads stdin and writes stdout by default; FILE or '-' can
-also stand in for stdin, and -o '-' for stdout.
+Convert between markdown tables and CSV. The direction follows the
+input: a .md file converts to CSV, a .csv file to markdown. Reads stdin
+and writes stdout by default; FILE or '-' can also stand in for stdin,
+and -o '-' for stdout. Stdin is detected by content: input starting
+with '|' is markdown, anything else is CSV.
 
 Flags:
-  -f, --from FORMAT    input format (md or csv); required when reading stdin
   -o, --output FILE    output file (default: stdout); a .md or .csv
                        extension overrides the output format, so
                        'mdcsv in.md -o out.md' reformats the table
@@ -238,9 +240,7 @@ func parseFlags(args []string) (Config, error) {
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {}
 
-	var from, output string
-	fs.StringVar(&from, "f", "", "")
-	fs.StringVar(&from, "from", "", "")
+	var output string
 	fs.StringVar(&output, "o", "", "")
 	fs.StringVar(&output, "output", "", "")
 
@@ -263,7 +263,7 @@ func parseFlags(args []string) (Config, error) {
 		remaining = rest[1:]
 	}
 
-	return resolveConfig(from, input, output)
+	return resolveConfig(input, output)
 }
 
 func run(cfg Config, stdin io.Reader, stdout io.Writer) error {
@@ -280,12 +280,21 @@ func run(cfg Config, stdin io.Reader, stdout io.Writer) error {
 		return fmt.Errorf("reading input: %w", err)
 	}
 
-	table, err := parsers[cfg.From].Parse(string(content))
+	from := cfg.From
+	if from == "" {
+		from = detectFormat(string(content))
+	}
+	to := cfg.To
+	if to == "" {
+		to = counterpart[from]
+	}
+
+	table, err := parsers[from].Parse(string(content))
 	if err != nil {
 		return fmt.Errorf("parsing input: %w", err)
 	}
 
-	out, err := formatters[cfg.To].Format(table)
+	out, err := formatters[to].Format(table)
 	if err != nil {
 		return fmt.Errorf("formatting output: %w", err)
 	}

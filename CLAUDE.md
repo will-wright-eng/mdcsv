@@ -35,14 +35,14 @@ All code lives in a single `main.go` (per DESIGN.md: stay there until a concrete
 
 **Config resolution pipeline:** `parseFlags` → `resolveConfig` → `run`
 
-Input format: explicit `-f` wins, then the input file extension, then error (stdin without `-f` is always an error). Output format: the `-o` file extension if given, otherwise the counterpart of the input format (`md`→`csv`, `csv`→`md`). There is no output-format flag.
+There are no format flags. Input format comes from the input file extension (`.md`/`.csv`, anything else errors); stdin is sniffed in `run` via `detectFormat` (content starting with `|` is `md`, otherwise `csv`). Output format is the `-o` file extension if given, otherwise the counterpart of the input format (`md`→`csv`, `csv`→`md`). `Config.From`/`To` stay empty for stdin until `run` resolves them.
 
 **I/O:** input from stdin or a positional file arg; output to stdout or `-o FILE`. Both sides accept `-` as an explicit stdin/stdout alias.
 
 ## CLI surface
 
 ```
-mdcsv [-f FORMAT] [-o FILE] [FILE]
+mdcsv [-o FILE] [FILE]
 ```
 
 Supported formats: `md`, `csv`. `md→md` (reformat/align columns) is reached by writing to a `.md` output path, e.g. `mdcsv messy.md -o clean.md`.

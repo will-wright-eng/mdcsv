@@ -36,9 +36,9 @@ smoke: build ## run end-to-end smoke tests against testdata fixtures
 	echo "md→csv (file in, stdout)";        $$bin testdata/simple.md  | diff testdata/simple.csv -; \
 	echo "csv→md (file in, stdout)";        $$bin testdata/simple.csv | diff testdata/simple.md  -; \
 	echo "md→md (reformat via -o .md)";     $$bin testdata/messy.md -o $$tmp/clean.md && diff testdata/simple.md $$tmp/clean.md; \
-	echo "md→csv (stdin pipe, -f)";         cat testdata/simple.md | $$bin -f md | diff testdata/simple.csv -; \
+	echo "md→csv (stdin pipe, sniffed)";    cat testdata/simple.md  | $$bin | diff testdata/simple.csv -; \
+	echo "csv→md (stdin pipe, sniffed)";    cat testdata/simple.csv | $$bin | diff testdata/simple.md  -; \
 	echo "md→csv (file in, -o .csv)";       $$bin testdata/simple.md -o $$tmp/out.csv && diff testdata/simple.csv $$tmp/out.csv; \
-	echo "stdin without -f errors";         if cat testdata/simple.md | $$bin 2>/dev/null; then echo "  expected non-zero exit" >&2; exit 1; fi; \
 	echo "unknown input extension errors";  if $$bin go.mod 2>/dev/null; then echo "  expected non-zero exit" >&2; exit 1; fi; \
 	rm -rf $$tmp; \
 	echo "all smoke checks passed"

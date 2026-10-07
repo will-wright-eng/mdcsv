@@ -16,14 +16,15 @@ and `to` are independent.
 
 - Pipe-friendly: read stdin, write stdout by default.
 - Conversion direction is implied by the input format: `md` → `csv` and
-  `csv` → `md`. Only stdin needs an explicit format flag.
+  `csv` → `md`. No format flags at all.
 - Support md → md as a first-class mode (pretty-print / column-align).
 - Keep the surface area small — one binary, no subcommands.
 
 ## Non-goals
 
 - Multiple input files / batch mode.
-- Format auto-detection from content (extension-based only).
+- Robust content-based format detection. Stdin uses a one-character
+  sniff (`|` → markdown, else CSV); files are extension-based only.
 - Streaming for tables larger than memory.
 - `csv → csv` normalization. The registry technically supports it, but no
   custom quoting/whitespace handling beyond `encoding/csv` defaults is in
@@ -32,17 +33,16 @@ and `to` are independent.
 ## CLI surface
 
 ```
-mdcsv [-f FORMAT] [-o FILE] [FILE]
+mdcsv [-o FILE] [FILE]
 ```
 
 | Flag             | Description                                                |
 | ---------------- | ---------------------------------------------------------- |
-| `-f`, `--from`   | Input format: `md` or `csv`. Required when reading stdin.  |
 | `-o`, `--output` | Output file. Default or `-`: stdout.                       |
 | `FILE`           | Input file. Default or `-`: stdin.                         |
 | `-h`, `--help`   | Usage.                                                     |
 
-There is no output-format flag. With only two formats the direction is
+There are no format flags. With only two formats the direction is
 implied: markdown in, CSV out; CSV in, markdown out.
 
 ### Examples
@@ -51,8 +51,8 @@ implied: markdown in, CSV out; CSV in, markdown out.
 # File in, csv on stdout
 mdcsv data.md > data.csv
 
-# Pipe: md on stdin, csv on stdout
-cat data.md | mdcsv -f md > data.csv
+# Pipe: format sniffed from stdin content
+cat data.md | mdcsv > data.csv
 
 # File in, file out
 mdcsv data.csv -o data.md
@@ -64,11 +64,13 @@ mdcsv messy.md -o clean.md
 
 ## Format inference
 
-Input format, in priority order:
+Input format:
 
-1. Explicit `-f` — always wins.
-2. `FILE` extension.
-3. Neither (stdin without `-f`) → error with usage message.
+1. `FILE` extension, when a file is given.
+2. Stdin: content sniff. Input whose first non-blank character is `|` is
+   markdown; anything else is CSV. Deliberately naive — a CSV whose first
+   cell starts with `|` is misdetected, and the markdown parser then
+   reports the error.
 
 Output format, in priority order:
 
@@ -79,12 +81,11 @@ Output format, in priority order:
 | ------------------- | ------ |
 | `.md`               | `md`   |
 | `.csv`              | `csv`  |
-| anything else       | error — ask for explicit `-f` (input) or a `.md`/`.csv` path (output) |
+| anything else       | error — rename the file or use a `.md`/`.csv` path for `-o` |
 
-Consequences: `cat in.md | mdcsv -o out.csv` errors (stdin has no `-f`),
-but `cat in.md | mdcsv -f md -o out.csv` works. `mdcsv in.md > out.csv`
-works with no flags at all. md → md through a pipe is not expressible;
-reformatting requires a `.md` output path.
+Consequences: `mdcsv in.md > out.csv` and `cat in.md | mdcsv > out.csv`
+both work with no flags. md → md through a pipe is not expressible;
+reformatting requires a `.md` output path (`mdcsv messy.md -o clean.md`).
 
 ## md → md formatting
 
@@ -159,6 +160,7 @@ formatters := map[string]Formatter{
 | -------------------------------- | -------------------------------- |
 | `--to-csv` / `--to-md`           | implied by input format          |
 | `--in PATH` (required)           | positional `PATH` (optional)     |
+| `-f` / `-t` (interim redesign)   | removed — extension or stdin sniff |
 | `--out PATH` (auto-defaulted)    | `-o PATH` (default: stdout)      |
 | Default output path inferred     | Removed — use `-o` or redirect   |
 
@@ -182,9 +184,9 @@ Add `main_test.go` with:
 - Table-driven formatter tests (`MarkdownFormatter`, `CSVFormatter`):
   given a `Table`, output matches the expected string byte-for-byte
   (column alignment matters for the markdown formatter).
-- Format inference tests covering the priority rules in "Format
-  inference" — flag wins over extension, each side independent, stdin
-  without `-f` errors, etc.
+- Format inference tests covering the rules in "Format inference" —
+  extension sets the direction, `-o` extension overrides, stdin is
+  sniffed, unknown extensions error, etc.
 
 Add a `make smoke` target that exercises the three in-scope mode
 combinations end-to-end via shell pipelines (md→csv, csv→md, md→md),
