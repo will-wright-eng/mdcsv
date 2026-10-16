@@ -7,6 +7,8 @@ writes stdout, and infers the direction from the input: `.md` in → CSV out,
 ## Install
 
 ```sh
+brew install will-wright-eng/tap/mdcsv
+# or, with Go:
 go install github.com/will-wright-eng/mdcsv@latest
 ```
 
